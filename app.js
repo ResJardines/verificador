@@ -22,32 +22,66 @@ const MESES = [
 const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12 };
 
 const $ = (id) => document.getElementById(id);
-const estado = { claves: {}, cancelados: [], actualizado: null, flujo: null, escaneando: false, detector: undefined };
+const estado = {
+  claves: {}, cancelados: [], actualizado: null, repositorio: null, flujo: null, escaneando: false, detector: undefined,
+};
 const lienzo = document.createElement("canvas");
 const ctx = lienzo.getContext("2d", { willReadFrequently: true });
 
 /* ---------------- Datos publicados por la Administración ---------------- */
 
-async function obtenerJSON(ruta) {
+const ESPERA_DATOS_MS = 5000;
+
+async function obtenerJSON(url, encabezados = {}) {
+  const control = new AbortController();
+  const temporizador = setTimeout(() => control.abort(), ESPERA_DATOS_MS);
   try {
-    const respuesta = await fetch(ruta, { cache: "no-cache" });
+    const respuesta = await fetch(url, { cache: "no-store", headers: encabezados, signal: control.signal });
     return respuesta.ok ? await respuesta.json() : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(temporizador);
   }
 }
 
-async function cargarDatos() {
-  const [claves, cancelados] = await Promise.all([obtenerJSON("datos/claves.json"), obtenerJSON("datos/cancelados.json")]);
-  estado.claves = claves?.claves ?? {};
-  estado.cancelados = cancelados?.folios ?? [];
-  estado.actualizado = cancelados?.actualizado ?? null;
+function repositorio() {
+  if (estado.repositorio) return estado.repositorio;
+  const organizacion = /^([\w-]+)\.github\.io$/i.exec(location.hostname);
+  const carpeta = location.pathname.split("/").filter(Boolean)[0];
+  return organizacion && carpeta ? `${organizacion[1]}/${carpeta}` : null;
+}
+
+async function obtenerCancelados() {
+  // 1) Directo del repositorio con la API de GitHub: refleja una cancelación en segundos. La página publicada puede
+  //    tardar hasta 10 minutos por la caché de GitHub Pages. La API permite 60 consultas por hora por red.
+  const repo = repositorio();
+  if (repo) {
+    const datos = await obtenerJSON(`https://api.github.com/repos/${repo}/contents/datos/cancelados.json`, {
+      Accept: "application/vnd.github.raw+json",
+    });
+    if (datos?.folios) return datos;
+  }
+  // 2) Copia de la página publicada; sin conexión, el trabajador de servicio entrega la última guardada.
+  return obtenerJSON("datos/cancelados.json");
+}
+
+async function actualizarDatos() {
+  const [claves, cancelados] = await Promise.all([obtenerJSON("datos/claves.json"), obtenerCancelados()]);
+  if (claves?.claves) {
+    estado.claves = claves.claves;
+    estado.repositorio = claves.repositorio || estado.repositorio;
+  }
+  if (cancelados?.folios) {
+    estado.cancelados = cancelados.folios;
+    estado.actualizado = cancelados.actualizado ?? null;
+  }
   $("pie-datos").textContent = estado.actualizado
-    ? `Lista de cancelaciones actualizada al ${fechaCorta(aCompacta(estado.actualizado))}.`
+    ? `Lista de cancelaciones actualizada al ${fechaHora(estado.actualizado)}.`
     : "No se pudieron cargar los datos del verificador. Ábrelo con conexión a internet.";
 }
 
-const listos = cargarDatos();
+let listos = actualizarDatos();
 
 /* ---------------- Utilidades ---------------- */
 
@@ -55,6 +89,7 @@ const aCompacta = (iso) => iso.slice(0, 10).replaceAll("-", "");
 const esFecha = (texto) => /^\d{8}$/.test(texto);
 const fechaCorta = (f) => `${f.slice(6, 8)}/${f.slice(4, 6)}/${f.slice(0, 4)}`;
 const fechaLarga = (f) => `${Number(f.slice(6, 8))} de ${MESES[Number(f.slice(4, 6)) - 1]} de ${f.slice(0, 4)}`;
+const fechaHora = (iso) => `${fechaCorta(aCompacta(iso))} ${iso.slice(11, 16)}`;
 
 function hoy() {
   const f = new Date();
@@ -94,6 +129,7 @@ async function claveCripto(identificador) {
 /* ---------------- Verificación ---------------- */
 
 async function verificarTexto(texto) {
+  listos = actualizarDatos(); // cada verificación consulta la lista de cancelaciones más reciente
   await listos;
   texto = (texto || "").trim();
   if (texto.startsWith("AVJ2*")) return verificarFirmado(texto);
@@ -254,7 +290,7 @@ function leerFormatoAnterior(texto) {
 
 function notaCancelaciones() {
   if (!estado.actualizado) return "No se pudo consultar la lista de cancelaciones.";
-  return `Cancelaciones consultadas al ${fechaCorta(aCompacta(estado.actualizado))}. `
+  return `Cancelaciones consultadas al ${fechaHora(estado.actualizado)}. `
     + "Si se canceló después de esa fecha, la Administración puede confirmarlo.";
 }
 
