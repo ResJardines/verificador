@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Verificador AVJAC</title>
+<meta name="description" content="Comprueba Constancias de No Adeudo y Anuencias de construcción de Residencial Jardines, A.C.">
+<meta name="theme-color" content="#8E2232">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Verificador">
+<style>
+  :root {
+    --vino: #8E2232; --vino-oscuro: #6F1A27; --fondo: #F6F1F2; --tarjeta: #FFFFFF; --texto: #1F1F1F;
+    --gris: #5B5B5B; --borde: #E5D9DC;
+    --ok: #1E6B30; --ok-fondo: #E3F4E8; --aviso: #8A5A00; --aviso-fondo: #FFF3D6;
+    --error: #A0001C; --error-fondo: #FDE4E7; --neutro: #444444; --neutro-fondo: #ECECEC;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--fondo); color: var(--texto); font-size: 16px; line-height: 1.45;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .barra {
+    background: var(--vino); color: #FFF; display: flex; gap: 12px; align-items: center;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  }
+  .barra img { width: 44px; height: 44px; border-radius: 10px; }
+  .barra h1 { font-size: 1.1rem; margin: 0; }
+  .barra p { margin: 0; font-size: .85rem; opacity: .85; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 16px; }
+  .intro { margin: 0 0 14px; color: var(--gris); }
+  .boton {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px;
+    border-radius: 12px; font: 600 1.05rem/1.2 inherit; cursor: pointer; border: 0; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .primario { background: var(--vino); color: #FFF; }
+  .primario:active { background: var(--vino-oscuro); }
+  .secundario { background: #FFF; color: var(--vino); border: 2px solid var(--vino); margin-top: 10px; }
+  .visor { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 1 / 1; }
+  .visor video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .marco {
+    position: absolute; inset: 12%; border: 3px solid rgba(255, 255, 255, .95); border-radius: 12px;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, .35);
+  }
+  .ayuda { color: var(--gris); font-size: .9rem; text-align: center; margin: 10px 0 0; }
+  .estado { display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 14px; border: 2px solid; }
+  .estado .icono {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    font-weight: 800; font-size: 1.25rem; color: #FFF;
+  }
+  .estado h2 { margin: 0; font-size: 1.15rem; line-height: 1.25; }
+  .estado p { margin: 4px 0 0; }
+  .ok { background: var(--ok-fondo); border-color: var(--ok); color: var(--ok); } .ok .icono { background: var(--ok); }
+  .aviso { background: var(--aviso-fondo); border-color: var(--aviso); color: var(--aviso); } .aviso .icono { background: var(--aviso); }
+  .error { background: var(--error-fondo); border-color: var(--error); color: var(--error); } .error .icono { background: var(--error); }
+  .neutro { background: var(--neutro-fondo); border-color: var(--neutro); color: var(--neutro); } .neutro .icono { background: var(--neutro); }
+  .datos { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; margin: 16px 0 0; }
+  .datos dt { color: var(--gris); font-size: .9rem; }
+  .datos dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  @media (max-width: 380px) { .datos { grid-template-columns: 1fr; gap: 2px; } .datos dd { margin-bottom: 8px; } }
+  .sello { margin-top: 16px; padding: 12px; background: #FAF6F7; border: 1px dashed var(--borde); border-radius: 10px; font-size: .9rem; }
+  .sello code {
+    display: block; margin: 4px 0; font: 700 1.05rem ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--vino); letter-spacing: .5px; overflow-wrap: anywhere;
+  }
+  .crudo { white-space: pre-wrap; overflow-wrap: anywhere; font: .85rem ui-monospace, Menlo, Consolas, monospace; background: #F4F4F4; padding: 10px; border-radius: 8px; }
+  .nota { color: var(--gris); font-size: .85rem; margin: 14px 0 0; }
+  details summary { font-weight: 600; cursor: pointer; color: var(--vino); }
+  textarea, .campo {
+    width: 100%; font: .9rem ui-monospace, Menlo, Consolas, monospace; padding: 10px; border: 1px solid var(--borde);
+    border-radius: 10px; margin-top: 10px; background: #FFF; color: var(--texto);
+  }
+  .hash { display: block; margin-top: 10px; font: .9rem ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .comparacion { font-weight: 700; margin-top: 6px; }
+  .comparacion.si { color: var(--ok); } .comparacion.no { color: var(--error); }
+  footer {
+    max-width: 560px; margin: 0 auto; padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+    color: var(--gris); font-size: .8rem; text-align: center; display: grid; gap: 8px;
+  }
+</style>
+</head>
+<body>
+<header class="barra">
+  <img src="icono-192.png" alt="">
+  <div>
+    <h1>Verificador de documentos</h1>
+    <p>Residencial Jardines, A.C.</p>
+  </div>
+</header>
+
+<main>
+  <section id="inicio" class="tarjeta">
+    <p class="intro">
+      Comprueba que una <strong>Constancia de No Adeudo</strong> o una <strong>Anuencia de construcción</strong>
+      fue emitida por la Asociación y que sus datos no fueron alterados.
+    </p>
+    <button id="btn-escanear" class="boton primario" type="button">Escanear código QR</button>
+    <label class="boton secundario" for="foto">Leer desde foto o captura</label>
+    <input id="foto" type="file" accept="image/*" hidden>
+  </section>
+
+  <section id="camara" class="tarjeta" hidden>
+    <div class="visor">
+      <video id="video" playsinline muted></video>
+      <div class="marco"></div>
+    </div>
+    <p class="ayuda">Centra el código QR dentro del recuadro y mantén el teléfono firme.</p>
+    <button id="btn-cancelar" class="boton secundario" type="button">Cancelar</button>
+  </section>
+
+  <section id="resultado" class="tarjeta" hidden>
+    <div id="estado" class="estado">
+      <div id="estado-icono" class="icono"></div>
+      <div>
+        <h2 id="estado-titulo"></h2>
+        <p id="estado-detalle"></p>
+      </div>
+    </div>
+    <dl id="datos" class="datos"></dl>
+    <pre id="crudo" class="crudo" hidden></pre>
+    <div id="sello" class="sello" hidden>
+      Inicio del sello digital:
+      <code id="sello-valor"></code>
+      Debe coincidir con el comienzo del <strong>Sello SHA-256</strong> impreso en el documento.
+    </div>
+    <p id="nota" class="nota"></p>
+    <button id="btn-otro" class="boton primario" type="button" style="margin-top:16px">Verificar otro documento</button>
+  </section>
+
+  <details class="tarjeta">
+    <summary>Calcular el SHA-256 de una cadena original</summary>
+    <textarea id="cadena" rows="5" placeholder="Pega aquí la cadena original completa" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <input id="sello-esperado" class="campo" placeholder="Sello a comparar (opcional)" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <output id="hash" class="hash"></output>
+    <div id="comparacion" class="comparacion"></div>
+  </details>
+</main>
+
+<footer>
+  <span id="pie-datos">Cargando datos del verificador…</span>
+  <button id="btn-instalar" class="boton secundario" type="button" hidden>Instalar como app</button>
+  <span id="ayuda-ios" hidden>Para instalarlo en iPhone: botón Compartir → «Agregar a pantalla de inicio».</span>
+  <span>Funciona sin internet después de abrirlo una vez.</span>
+</footer>
+
+<script src="vendor/jsQR.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
