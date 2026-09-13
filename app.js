@@ -27,6 +27,7 @@ const estado = {
 };
 const lienzo = document.createElement("canvas");
 const ctx = lienzo.getContext("2d", { willReadFrequently: true });
+const AYUDA_CAMARA = "Centra el código QR dentro del recuadro y mantén el teléfono firme.";
 
 /* ---------------- Datos publicados por la Administración ---------------- */
 
@@ -145,12 +146,25 @@ async function verificarTexto(texto) {
       sello: legado.sello,
     });
   }
+  if (/^https:\/\/wa\.me\//i.test(texto)) {
+    return mostrar({
+      tipo: "neutro",
+      titulo: "Código de WhatsApp de la Administración",
+      detalle: "Este código abre WhatsApp para escribir a la Administración; no verifica el documento. "
+        + "Escanea el otro código QR, el que tiene el emblema al centro.",
+    });
+  }
   return mostrar({
     tipo: "neutro",
     titulo: "Este código no es de un documento de la Asociación",
     detalle: "Contenido leído:",
     crudo: texto,
   });
+}
+
+function esDeLaAsociacion(texto) {
+  texto = (texto || "").trim();
+  return texto.startsWith("AVJ2*") || Boolean(leerFormatoAnterior(texto));
 }
 
 function noValido(detalle) {
@@ -351,18 +365,48 @@ async function decodificar(fuente, sx, sy, sw, sh, anchoObjetivo) {
   lienzo.height = Math.max(1, Math.round(sh * escala));
   ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, lienzo.width, lienzo.height);
 
+  // Los documentos traen dos QR (verificación y WhatsApp): se devuelve el de la Asociación y el otro solo se anota.
   const detector = await obtenerDetector();
   if (detector) {
     try {
       const encontrados = await detector.detect(lienzo);
-      if (encontrados.length) return encontrados[0].rawValue;
+      const propio = encontrados.find((c) => esDeLaAsociacion(c.rawValue));
+      if (propio) return propio.rawValue;
+      if (encontrados.length) estado.otroCodigo = encontrados[0].rawValue;
     } catch {
       /* se intenta con jsQR */
     }
   }
   const imagen = ctx.getImageData(0, 0, lienzo.width, lienzo.height);
-  const resultado = jsQR(imagen.data, imagen.width, imagen.height, { inversionAttempts: "dontInvert" });
-  return resultado ? new TextDecoder().decode(new Uint8Array(resultado.binaryData)) : null;
+  for (let intento = 0; intento < 4; intento++) { // una foto puede traer los QR de más de un documento
+    const resultado = jsQR(imagen.data, imagen.width, imagen.height, { inversionAttempts: "dontInvert" });
+    if (!resultado) break;
+    const texto = new TextDecoder().decode(new Uint8Array(resultado.binaryData));
+    if (esDeLaAsociacion(texto)) return texto;
+    if (!texto) break; // lectura falsa: su recuadro no es confiable y taparlo podría borrar el código bueno
+    estado.otroCodigo ??= texto;
+    if (!taparCodigo(imagen, resultado.location)) break; // jsQR entrega un solo código: se blanquea este y se busca otro
+  }
+  return null;
+}
+
+function taparCodigo(imagen, ubicacion) {
+  const esquinas = [ubicacion.topLeftCorner, ubicacion.topRightCorner, ubicacion.bottomLeftCorner, ubicacion.bottomRightCorner];
+  const xs = esquinas.map((p) => p.x);
+  const ys = esquinas.map((p) => p.y);
+  const ancho = Math.max(...xs) - Math.min(...xs);
+  const alto = Math.max(...ys) - Math.min(...ys);
+  // Solo se tapa un recuadro con forma de código QR; uno deforme o enorme indica una detección dudosa.
+  if (!ancho || !alto || Math.max(ancho, alto) > 1.6 * Math.min(ancho, alto) || ancho > imagen.width * 0.5) return false;
+  const margen = ancho * 0.15;
+  const x0 = Math.max(0, Math.floor(Math.min(...xs) - margen));
+  const x1 = Math.min(imagen.width, Math.ceil(Math.max(...xs) + margen));
+  const y0 = Math.max(0, Math.floor(Math.min(...ys) - margen));
+  const y1 = Math.min(imagen.height, Math.ceil(Math.max(...ys) + margen));
+  for (let y = y0; y < y1; y++) {
+    imagen.data.fill(255, (y * imagen.width + x0) * 4, (y * imagen.width + x1) * 4);
+  }
+  return true;
 }
 
 async function iniciarCamara() {
@@ -383,6 +427,8 @@ async function iniciarCamara() {
   }
   const video = $("video");
   video.srcObject = estado.flujo;
+  estado.otroCodigo = null;
+  $("ayuda-camara").textContent = AYUDA_CAMARA;
   mostrarSeccion("camara");
   await video.play().catch(() => {});
   estado.escaneando = true;
@@ -404,6 +450,11 @@ async function buscarEnVideo(vuelta) {
       estado.escaneando = false;
       navigator.vibrate?.(60);
       return verificarTexto(texto);
+    }
+    if (estado.otroCodigo) {
+      $("ayuda-camara").textContent = /^https:\/\/wa\.me\//i.test(estado.otroCodigo)
+        ? "Ese es el código de WhatsApp. Apunta al código QR con el emblema al centro."
+        : "Ese código no es de la Asociación. Apunta al código QR con el emblema al centro.";
     }
   }
   setTimeout(() => buscarEnVideo(vuelta + 1), 120);
@@ -435,6 +486,7 @@ async function leerFoto(archivo) {
   } catch {
     return mostrar({ tipo: "aviso", titulo: "No se pudo abrir la imagen", detalle: "Prueba con otra foto o captura." });
   }
+  estado.otroCodigo = null;
   const w = imagen.naturalWidth;
   const h = imagen.naturalHeight;
   // Imagen completa y después mosaicos que se traslapan, empezando por la mitad inferior (donde va el QR).
@@ -450,6 +502,7 @@ async function leerFoto(archivo) {
   } finally {
     URL.revokeObjectURL(imagen.src);
   }
+  if (estado.otroCodigo) return verificarTexto(estado.otroCodigo); // solo había otro código, p. ej. el de WhatsApp
   return mostrar({
     tipo: "aviso",
     titulo: "No se encontró el código QR",
