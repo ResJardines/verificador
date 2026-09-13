@@ -1,6 +1,6 @@
 // Trabajador de servicio: permite abrir el verificador sin internet después de la primera visita.
-// Al exportar desde el programa, 20260913032450 se reemplaza para que los teléfonos descarguen la versión nueva.
-const VERSION = "20260913032450";
+// Al exportar desde el programa, 20260913044154 se reemplaza para que los teléfonos descarguen la versión nueva.
+const VERSION = "20260913044154";
 const CACHE = `verificador-avjac-${VERSION}`;
 const ARCHIVOS = [
   "./",
@@ -31,17 +31,19 @@ self.addEventListener("fetch", (evento) => {
   if (peticion.method !== "GET" || new URL(peticion.url).origin !== self.location.origin) return;
 
   // Claves y cancelaciones: primero la red (para tener la lista más reciente); sin conexión, la copia guardada.
-  if (new URL(peticion.url).pathname.includes("/datos/")) {
+  const url = new URL(peticion.url);
+  if (url.pathname.includes("/datos/")) {
+    const clave = url.origin + url.pathname;
     evento.respondWith(
       fetch(peticion)
         .then((respuesta) => {
           if (respuesta.ok) {
             const copia = respuesta.clone();
-            caches.open(CACHE).then((cache) => cache.put(peticion, copia));
+            caches.open(CACHE).then((cache) => cache.put(clave, copia));
           }
           return respuesta;
         })
-        .catch(() => caches.match(peticion, { ignoreSearch: true }))
+        .catch(() => caches.match(clave))
     );
     return;
   }
