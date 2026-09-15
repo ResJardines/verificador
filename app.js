@@ -31,6 +31,7 @@ const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa };
 const $ = (id) => document.getElementById(id);
 const estado = {
   claves: {}, cancelados: [], actualizado: null, repositorio: null, flujo: null, escaneando: false, detector: undefined,
+  recargaPendiente: false,
 };
 const lienzo = document.createElement("canvas");
 const ctx = lienzo.getContext("2d", { willReadFrequently: true });
@@ -336,6 +337,7 @@ function notaCancelaciones() {
 
 function mostrarSeccion(nombre) {
   for (const id of ["inicio", "camara", "resultado"]) $(id).hidden = id !== nombre;
+  if (nombre === "inicio") recargarSiHayVersionNueva();
 }
 
 function mostrar({ tipo, titulo, detalle = "", filas = [], sello = null, nota = "", crudo = null }) {
@@ -598,6 +600,28 @@ $("btn-instalar").addEventListener("click", async () => {
 });
 if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone) $("ayuda-ios").hidden = false;
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+/* ---------------- Actualización automática ---------------- */
+
+// Cuando se publica una versión nueva, su trabajador de servicio toma el control de la página (skipWaiting +
+// clients.claim) y la página se recarga para usar el código nuevo. Si hay un resultado en pantalla o la cámara está
+// abierta, se espera a que el usuario vuelva al inicio para no interrumpirlo.
+function recargarSiHayVersionNueva() {
+  if (estado.recargaPendiente && !$("inicio").hidden) location.reload();
+}
+
+if ("serviceWorker" in navigator) {
+  const yaTeniaVersion = Boolean(navigator.serviceWorker.controller); // en la primera visita no hace falta recargar
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!yaTeniaVersion || estado.recargaPendiente) return;
+    estado.recargaPendiente = true;
+    recargarSiHayVersionNueva();
+  });
+  navigator.serviceWorker.register("sw.js").then((registro) => {
+    // Una app instalada puede quedar días en segundo plano sin recargarse: al volver a ella se busca versión nueva.
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) registro.update().catch(() => {});
+    });
+  }).catch(() => {});
+}
 
 window.AVJAC = { verificarTexto, leerFoto };
