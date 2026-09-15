@@ -1,6 +1,6 @@
 // Trabajador de servicio: permite abrir el verificador sin internet después de la primera visita.
-// Al exportar desde el programa, 20260913221326 se reemplaza para que los teléfonos descarguen la versión nueva.
-const VERSION = "20260913221326";
+// Al exportar desde el programa, 20260914225344 se reemplaza para que los teléfonos descarguen la versión nueva.
+const VERSION = "20260914225344";
 const CACHE = `verificador-avjac-${VERSION}`;
 const ARCHIVOS = [
   "./",
