@@ -5,6 +5,7 @@
  * Formato AVJ2 del QR (lo genera el programa de escritorio):
  *   AVJ2*CNA*K1*RJ037*C5L02*TITULAR*2*20260831*20260912*20261012*SELLOCORTO*FIRMA
  *   AVJ2*CTC*K1*CTC/2026/001*C5L02*SOLICITANTE*2*32.50*2*20260915*20270915*SELLOCORTO*FIRMA
+ *   AVJ2*ACT*K1*CONSEJO/2026/03*1*20260914*3*ASUNTO*SELLOCORTO*FIRMA   (tipo de acta, fecha de la sesión, firmantes)
  * FIRMA = ECDSA P-256 / SHA-256 (r||s, 64 bytes) en Base32 sin relleno, sobre todo lo anterior al último '*'.
  * Toda la verificación ocurre en el teléfono: el contenido del QR no se envía a ningún servidor.
  */
@@ -19,7 +20,13 @@ const TIPOS_OBRA = [
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
-const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12 };
+const TIPOS_ACTA = {
+  1: "Acta de sesión del Consejo de Administración",
+  2: "Acta de Asamblea General Ordinaria",
+  3: "Acta de Asamblea General Extraordinaria",
+};
+const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12, ACT: 9 }; // campos antes de la firma
+const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa };
 
 const $ = (id) => document.getElementById(id);
 const estado = {
@@ -210,18 +217,18 @@ async function verificarFirmado(texto) {
     return noValido("La firma digital no corresponde a los datos. El documento fue alterado o no lo emitió la Asociación.");
   }
 
-  const documento = tipo === "CNA" ? datosConstancia(campos) : datosAnuencia(campos);
+  const documento = LECTORES[tipo](campos);
   if (!documento) return noValido("El código tiene un formato incorrecto.");
 
   let resultado;
   if (estado.cancelados.includes(documento.folio)) {
     resultado = { tipo: "error", titulo: "Auténtico, pero CANCELADO", detalle: `La Asociación canceló esta ${documento.nombre}. No es válida.` };
-  } else if (hoy() > documento.vigencia) {
+  } else if (documento.vigencia && hoy() > documento.vigencia) {
     resultado = { tipo: "aviso", titulo: "Auténtico, pero VENCIDO", detalle: `Su vigencia terminó el ${fechaLarga(documento.vigencia)}.` };
   } else {
     resultado = {
       tipo: "ok",
-      titulo: "Documento auténtico y vigente",
+      titulo: documento.vigencia ? "Documento auténtico y vigente" : "Documento auténtico",
       detalle: "Emitido por Organización Vecinal Residencial Jardines, A.C. Los datos coinciden con la firma digital.",
     };
   }
@@ -267,6 +274,23 @@ function datosAnuencia(c) {
       ["Niveles", niveles === "0" ? "No aplica" : niveles],
       ["Emisión", fechaLarga(emision)],
       ["Vigente hasta", fechaLarga(vigencia)],
+    ],
+  };
+}
+
+function datosActa(c) {
+  const [, , , folio, tipo, sesion, firmantes, asunto] = c;
+  if (!TIPOS_ACTA[tipo] || !esFecha(sesion) || !/^[1-6]$/.test(firmantes)) return null;
+  return {
+    folio,
+    vigencia: null, // las actas no vencen; solo pueden cancelarse
+    nombre: "acta",
+    filas: [
+      ["Documento", TIPOS_ACTA[tipo]],
+      ["Folio", folio],
+      ["Asunto", asunto],
+      ["Fecha de la sesión", fechaLarga(sesion)],
+      ["Firmantes", firmantes],
     ],
   };
 }
