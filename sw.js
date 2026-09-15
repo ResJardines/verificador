@@ -1,6 +1,6 @@
 // Trabajador de servicio: permite abrir el verificador sin internet después de la primera visita.
-// Al exportar desde el programa, 20260914225344 se reemplaza para que los teléfonos descarguen la versión nueva.
-const VERSION = "20260914225344";
+// Al exportar desde el programa, 20260915015550 se reemplaza para que los teléfonos descarguen la versión nueva.
+const VERSION = "20260915015550";
 const CACHE = `verificador-avjac-${VERSION}`;
 const ARCHIVOS = [
   "./",
@@ -15,7 +15,10 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener("install", (evento) => {
-  evento.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // cache: "reload" evita la caché HTTP de GitHub Pages (hasta 10 minutos): sin esto, la versión nueva podría
+  // guardar el app.js anterior.
+  const peticiones = ARCHIVOS.map((archivo) => new Request(archivo, { cache: "reload" }));
+  evento.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(peticiones)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (evento) => {
