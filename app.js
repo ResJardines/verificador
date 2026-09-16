@@ -5,7 +5,9 @@
  * Formato AVJ2 del QR (lo genera el programa de escritorio):
  *   AVJ2*CNA*K1*RJ037*C5L02*TITULAR*2*20260831*20260912*20261012*SELLOCORTO*FIRMA
  *   AVJ2*CTC*K1*CTC/2026/001*C5L02*SOLICITANTE*2*32.50*2*20260915*20270915*SELLOCORTO*FIRMA
- *   AVJ2*ACT*K1*CONSEJO/2026/03*1*20260914*3*ASUNTO*SELLOCORTO*FIRMA   (tipo de acta, fecha de la sesión, firmantes)
+ *   AVJ2*ACT*K1*CSJ/2026/04*1*20260914*3*ASUNTO*SELLOCORTO*FIRMA   (tipo de acta, fecha de la sesión, firmantes)
+ *   AVJ2*MUL*K1*MUL/2026/001*C5L02*PROPIETARIO*1500.00*20260910*20260916*20261001*SELLOCORTO*FIRMA
+ *        (monto, fecha de los hechos, emisión, fecha límite de pago)
  * FIRMA = ECDSA P-256 / SHA-256 (r||s, 64 bytes) en Base32 sin relleno, sobre todo lo anterior al último '*'.
  * Toda la verificación ocurre en el teléfono: el contenido del QR no se envía a ningún servidor.
  */
@@ -25,8 +27,8 @@ const TIPOS_ACTA = {
   2: "Acta de Asamblea General Ordinaria",
   3: "Acta de Asamblea General Extraordinaria",
 };
-const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12, ACT: 9 }; // campos antes de la firma
-const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa };
+const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12, ACT: 9, MUL: 11 }; // campos antes de la firma
+const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa, MUL: datosMulta };
 
 const $ = (id) => document.getElementById(id);
 const estado = {
@@ -292,6 +294,27 @@ function datosActa(c) {
       ["Asunto", asunto],
       ["Fecha de la sesión", fechaLarga(sesion)],
       ["Firmantes", firmantes],
+    ],
+  };
+}
+
+function datosMulta(c) {
+  const [, , , folio, clave, propietario, monto, hechos, emision, limite] = c;
+  if (![hechos, emision, limite].every(esFecha) || !/^\d+\.\d{2}$/.test(monto)) return null;
+  const importe = Number(monto).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+  return {
+    folio,
+    vigencia: null, // la fecha límite de pago no invalida la notificación
+    nombre: "multa",
+    filas: [
+      ["Documento", "Notificación de multa"],
+      ["Folio", folio],
+      ["Inmueble", inmueble(clave)],
+      ["Propietario", propietario],
+      ["Monto", importe],
+      ["Fecha de los hechos", fechaLarga(hechos)],
+      ["Emisión", fechaLarga(emision)],
+      ["Fecha límite de pago", fechaLarga(limite)],
     ],
   };
 }
