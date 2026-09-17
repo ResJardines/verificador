@@ -6,6 +6,12 @@
 <title>Verificador AVJAC</title>
 <meta name="description" content="Comprueba Constancias de No Adeudo, Anuencias de construcción, Actas y Notificaciones de multa de Residencial Jardines, A.C.">
 <meta name="theme-color" content="#8E2232">
+<script>
+  try {
+    var tema = localStorage.getItem("tema") || (matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro");
+    document.documentElement.dataset.tema = tema;
+  } catch (e) { /* sin almacenamiento: se usa el modo claro hasta que cargue la app */ }
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icono-192.png">
 <link rel="apple-touch-icon" href="icono-192.png">
@@ -17,7 +23,16 @@
     --gris: #5B5B5B; --borde: #E5D9DC;
     --ok: #1E6B30; --ok-fondo: #E3F4E8; --aviso: #8A5A00; --aviso-fondo: #FFF3D6;
     --error: #A0001C; --error-fondo: #FDE4E7; --neutro: #444444; --neutro-fondo: #ECECEC;
+    --acento: #8E2232; --superficie-suave: #FAF6F7; --codigo-fondo: #F4F4F4; --campo: #FFFFFF; --barra: #8E2232;
     color-scheme: light;
+  }
+  :root[data-tema="oscuro"] {
+    --vino: #A8344A; --vino-oscuro: #8E2232; --fondo: #161214; --tarjeta: #221D20; --texto: #ECE5E8;
+    --gris: #A99EA3; --borde: #3A3236;
+    --ok: #7FD69A; --ok-fondo: #15301F; --aviso: #F0C267; --aviso-fondo: #382C12;
+    --error: #FF8C9D; --error-fondo: #3D1820; --neutro: #C9C9C9; --neutro-fondo: #2D2D2D;
+    --acento: #E58C9C; --superficie-suave: #2A2427; --codigo-fondo: #2A2427; --campo: #2C2629; --barra: #4A1119;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -27,12 +42,19 @@
     -webkit-text-size-adjust: 100%;
   }
   .barra {
-    background: var(--vino); color: #FFF; display: flex; gap: 12px; align-items: center;
+    background: var(--barra); color: #FFF; display: flex; gap: 12px; align-items: center;
     padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
   }
   .barra img { width: 44px; height: 44px; border-radius: 10px; }
   .barra h1 { font-size: 1.1rem; margin: 0; }
   .barra p { margin: 0; font-size: .85rem; opacity: .85; }
+  .barra > div { flex: 1; }
+  .tema {
+    flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .45);
+    background: rgba(255, 255, 255, .12); color: #FFF; font-size: 1.3rem; line-height: 1; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tema:active { background: rgba(255, 255, 255, .25); }
   main { max-width: 560px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
   .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 16px; }
   .intro { margin: 0 0 14px; color: var(--gris); }
@@ -43,7 +65,7 @@
   }
   .primario { background: var(--vino); color: #FFF; }
   .primario:active { background: var(--vino-oscuro); }
-  .secundario { background: #FFF; color: var(--vino); border: 2px solid var(--vino); margin-top: 10px; }
+  .secundario { background: var(--tarjeta); color: var(--acento); border: 2px solid var(--acento); margin-top: 10px; }
   .visor { position: relative; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 1 / 1; }
   .visor video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .marco {
@@ -57,6 +79,7 @@
     font-weight: 800; font-size: 1.25rem; color: #FFF;
   }
   .estado h2 { margin: 0; font-size: 1.15rem; line-height: 1.25; }
+  :root[data-tema="oscuro"] .estado .icono { color: #161214; }
   .estado p { margin: 4px 0 0; }
   .ok { background: var(--ok-fondo); border-color: var(--ok); color: var(--ok); } .ok .icono { background: var(--ok); }
   .aviso { background: var(--aviso-fondo); border-color: var(--aviso); color: var(--aviso); } .aviso .icono { background: var(--aviso); }
@@ -66,17 +89,17 @@
   .datos dt { color: var(--gris); font-size: .9rem; }
   .datos dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
   @media (max-width: 380px) { .datos { grid-template-columns: 1fr; gap: 2px; } .datos dd { margin-bottom: 8px; } }
-  .sello { margin-top: 16px; padding: 12px; background: #FAF6F7; border: 1px dashed var(--borde); border-radius: 10px; font-size: .9rem; }
+  .sello { margin-top: 16px; padding: 12px; background: var(--superficie-suave); border: 1px dashed var(--borde); border-radius: 10px; font-size: .9rem; }
   .sello code {
     display: block; margin: 4px 0; font: 700 1.05rem ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    color: var(--vino); letter-spacing: .5px; overflow-wrap: anywhere;
+    color: var(--acento); letter-spacing: .5px; overflow-wrap: anywhere;
   }
-  .crudo { white-space: pre-wrap; overflow-wrap: anywhere; font: .85rem ui-monospace, Menlo, Consolas, monospace; background: #F4F4F4; padding: 10px; border-radius: 8px; }
+  .crudo { white-space: pre-wrap; overflow-wrap: anywhere; font: .85rem ui-monospace, Menlo, Consolas, monospace; background: var(--codigo-fondo); padding: 10px; border-radius: 8px; }
   .nota { color: var(--gris); font-size: .85rem; margin: 14px 0 0; }
-  details summary { font-weight: 600; cursor: pointer; color: var(--vino); }
+  details summary { font-weight: 600; cursor: pointer; color: var(--acento); }
   textarea, .campo {
     width: 100%; font: .9rem ui-monospace, Menlo, Consolas, monospace; padding: 10px; border: 1px solid var(--borde);
-    border-radius: 10px; margin-top: 10px; background: #FFF; color: var(--texto);
+    border-radius: 10px; margin-top: 10px; background: var(--campo); color: var(--texto);
   }
   .hash { display: block; margin-top: 10px; font: .9rem ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
   .comparacion { font-weight: 700; margin-top: 6px; }
@@ -94,6 +117,7 @@
     <h1>Verificador de documentos</h1>
     <p>Residencial Jardines, A.C.</p>
   </div>
+  <button id="btn-tema" class="tema" type="button" aria-label="Cambiar a modo oscuro">☾</button>
 </header>
 
 <main>
