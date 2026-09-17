@@ -32,7 +32,7 @@ const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa, MUL
 
 const $ = (id) => document.getElementById(id);
 const estado = {
-  claves: {}, cancelados: [], actualizado: null, repositorio: null, flujo: null, escaneando: false, detector: undefined,
+  claves: {}, cancelados: [], sellosCancelados: [], actualizado: null, repositorio: null, flujo: null, escaneando: false, detector: undefined,
   recargaPendiente: false,
 };
 const lienzo = document.createElement("canvas");
@@ -85,6 +85,7 @@ async function actualizarDatos() {
   }
   if (cancelados?.folios) {
     estado.cancelados = cancelados.folios;
+    estado.sellosCancelados = cancelados.sellos ?? [];
     estado.actualizado = cancelados.actualizado ?? null;
   }
   $("pie-datos").textContent = estado.actualizado
@@ -223,8 +224,11 @@ async function verificarFirmado(texto) {
   const documento = LECTORES[tipo](campos);
   if (!documento) return noValido("El código tiene un formato incorrecto.");
 
+  // Un folio cancelado puede eliminarse y reutilizarse en un documento nuevo: por eso se revisa también el sello, que
+  // identifica a cada documento. El sello de uno cancelado queda en la lista aunque su folio ya se use de nuevo.
+  const sello = campos[campos.length - 1].toUpperCase();
   let resultado;
-  if (estado.cancelados.includes(documento.folio)) {
+  if (estado.sellosCancelados.includes(sello) || estado.cancelados.includes(documento.folio)) {
     resultado = { tipo: "error", titulo: "Auténtico, pero CANCELADO", detalle: `La Asociación canceló esta ${documento.nombre}. No es válida.` };
   } else if (documento.vigencia && hoy() > documento.vigencia) {
     resultado = { tipo: "aviso", titulo: "Auténtico, pero VENCIDO", detalle: `Su vigencia terminó el ${fechaLarga(documento.vigencia)}.` };
@@ -235,7 +239,7 @@ async function verificarFirmado(texto) {
       detalle: "Emitido por Organización Vecinal Residencial Jardines, A.C. Los datos coinciden con la firma digital.",
     };
   }
-  return mostrar({ ...resultado, filas: documento.filas, sello: campos[campos.length - 1], nota: notaCancelaciones() });
+  return mostrar({ ...resultado, filas: documento.filas, sello, nota: notaCancelaciones() });
 }
 
 function datosConstancia(c) {
@@ -622,6 +626,43 @@ $("btn-instalar").addEventListener("click", async () => {
   $("btn-instalar").hidden = true;
 });
 if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone) $("ayuda-ios").hidden = false;
+
+/* ---------------- Modo oscuro ---------------- */
+
+// Sin elección guardada se sigue el tema del teléfono. La elección solo se guarda en este navegador.
+const temaDelSistema = window.matchMedia("(prefers-color-scheme: dark)");
+
+function temaGuardado() {
+  try {
+    return localStorage.getItem("tema");
+  } catch {
+    return null;
+  }
+}
+
+function aplicarTema(tema) {
+  const oscuro = tema === "oscuro";
+  document.documentElement.dataset.tema = oscuro ? "oscuro" : "claro";
+  const boton = $("btn-tema");
+  boton.textContent = oscuro ? "☀" : "☾";
+  boton.setAttribute("aria-label", oscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro");
+  boton.title = boton.getAttribute("aria-label");
+  document.querySelector('meta[name="theme-color"]').content = oscuro ? "#4A1119" : "#8E2232";
+}
+
+aplicarTema(temaGuardado() ?? (temaDelSistema.matches ? "oscuro" : "claro"));
+temaDelSistema.addEventListener?.("change", (evento) => {
+  if (!temaGuardado()) aplicarTema(evento.matches ? "oscuro" : "claro");
+});
+$("btn-tema").addEventListener("click", () => {
+  const nuevo = document.documentElement.dataset.tema === "oscuro" ? "claro" : "oscuro";
+  try {
+    localStorage.setItem("tema", nuevo);
+  } catch {
+    /* sin almacenamiento: el cambio dura mientras la página esté abierta */
+  }
+  aplicarTema(nuevo);
+});
 
 /* ---------------- Actualización automática ---------------- */
 
