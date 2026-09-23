@@ -7,6 +7,10 @@
  *   AVJ2*CTC*K1*CTC/2026/001*C5L02*SOLICITANTE*2*32.50*2*20260915*20270915*SELLOCORTO*FIRMA
  *   AVJ2*ACT*K1*CSJ/2026/04*1*20260914*3*ASUNTO*SELLOCORTO*FIRMA   (tipo de acta, fecha de la sesión, firmantes)
  *   AVJ2*MUL*K1*MUL/2026/001*C5L02*PROPIETARIO*1500.00*20260910*20260916*20261001*SELLOCORTO*FIRMA
+ *
+ * Los documentos nuevos llevan el contenido como enlace a esta página, para que la cámara del teléfono la abra:
+ *   https://…/verificador/#AVJ2*CNA*K1*RJ037*C5L02*JUAN%20PEREZ*…*FIRMA
+ * Lo que va después del '#' no sale del teléfono. Se acepta con enlace o sin él (los documentos anteriores).
  *        (monto, fecha de los hechos, emisión, fecha límite de pago)
  * FIRMA = ECDSA P-256 / SHA-256 (r||s, 64 bytes) en Base32 sin relleno, sobre todo lo anterior al último '*'.
  * Toda la verificación ocurre en el teléfono: el contenido del QR no se envía a ningún servidor.
@@ -140,10 +144,22 @@ async function claveCripto(identificador) {
 
 /* ---------------- Verificación ---------------- */
 
+// El contenido AVJ2 de un QR que es enlace al verificador (…#AVJ2*…); cualquier otro texto se devuelve igual.
+function contenidoFirmado(texto) {
+  texto = (texto || "").trim();
+  const enlace = /^https?:\/\/[^#]*#(AVJ2(\*|%2A).*)$/i.exec(texto);
+  if (!enlace) return texto;
+  try {
+    return decodeURIComponent(enlace[1]);
+  } catch {
+    return texto;
+  }
+}
+
 async function verificarTexto(texto) {
   listos = actualizarDatos(); // cada verificación consulta la lista de cancelaciones más reciente
   await listos;
-  texto = (texto || "").trim();
+  texto = contenidoFirmado(texto);
   if (texto.startsWith("AVJ2*")) return verificarFirmado(texto);
 
   const legado = leerFormatoAnterior(texto);
@@ -162,7 +178,7 @@ async function verificarTexto(texto) {
       tipo: "neutro",
       titulo: "Código de WhatsApp de la Administración",
       detalle: "Este código abre WhatsApp para escribir a la Administración; no verifica el documento. "
-        + "Escanea el otro código QR, el que tiene el emblema al centro.",
+        + "Escanea el otro código QR, el guinda y más grande.",
     });
   }
   return mostrar({
@@ -174,7 +190,7 @@ async function verificarTexto(texto) {
 }
 
 function esDeLaAsociacion(texto) {
-  texto = (texto || "").trim();
+  texto = contenidoFirmado(texto);
   return texto.startsWith("AVJ2*") || Boolean(leerFormatoAnterior(texto));
 }
 
@@ -506,8 +522,8 @@ async function buscarEnVideo(vuelta) {
     }
     if (estado.otroCodigo) {
       $("ayuda-camara").textContent = /^https:\/\/wa\.me\//i.test(estado.otroCodigo)
-        ? "Ese es el código de WhatsApp. Apunta al código QR con el emblema al centro."
-        : "Ese código no es de la Asociación. Apunta al código QR con el emblema al centro.";
+        ? "Ese es el código de WhatsApp. Apunta al código QR guinda, el más grande."
+        : "Ese código no es de la Asociación. Apunta al código QR guinda, el más grande.";
     }
   }
   setTimeout(() => buscarEnVideo(vuelta + 1), 120);
@@ -687,5 +703,19 @@ if ("serviceWorker" in navigator) {
     });
   }).catch(() => {});
 }
+
+/* ---------------- Abierto desde la cámara del teléfono ---------------- */
+
+// El QR de los documentos nuevos es un enlace a esta página con el contenido después del '#'. Se verifica al abrir y
+// se quita de la dirección, para que recargar o abrir la app instalada después no vuelva a mostrar ese documento.
+// hashchange cubre el caso de que el teléfono reutilice la pestaña ya abierta con el siguiente documento.
+function verificarDesdeEnlace() {
+  if (!/^#AVJ2/i.test(location.hash)) return;
+  const texto = location.href;
+  history.replaceState(null, "", location.pathname + location.search);
+  verificarTexto(texto);
+}
+window.addEventListener("hashchange", verificarDesdeEnlace);
+verificarDesdeEnlace();
 
 window.AVJAC = { verificarTexto, leerFoto };
