@@ -7,6 +7,7 @@
  *   AVJ2*CTC*K1*CTC/2026/001*C5L02*SOLICITANTE*2*32.50*2*20260915*20270915*SELLOCORTO*FIRMA
  *   AVJ2*ACT*K1*CSJ/2026/04*1*20260914*3*ASUNTO*SELLOCORTO*FIRMA   (tipo de acta, fecha de la sesión, firmantes)
  *   AVJ2*MUL*K1*MUL/2026/001*C5L02*PROPIETARIO*1500.00*20260910*20260916*20261001*SELLOCORTO*FIRMA
+ *   AVJ2*OFI*K1*OF/2026/01*DESTINATARIO*ASUNTO*20260930*SELLOCORTO*FIRMA   (oficio a terceros, del portal)
  *
  * Los documentos nuevos llevan el contenido como enlace a esta página, para que la cámara del teléfono la abra:
  *   https://…/verificador/#AVJ2*CNA*K1*RJ037*C5L02*JUAN%20PEREZ*…*FIRMA
@@ -31,8 +32,8 @@ const TIPOS_ACTA = {
   2: "Acta de Asamblea General Ordinaria",
   3: "Acta de Asamblea General Extraordinaria",
 };
-const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12, ACT: 9, MUL: 11 }; // campos antes de la firma
-const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa, MUL: datosMulta };
+const CAMPOS_ESPERADOS = { CNA: 11, CTC: 12, ACT: 9, MUL: 11, OFI: 8 }; // campos antes de la firma
+const LECTORES = { CNA: datosConstancia, CTC: datosAnuencia, ACT: datosActa, MUL: datosMulta, OFI: datosOficio };
 
 const $ = (id) => document.getElementById(id);
 const estado = {
@@ -245,7 +246,9 @@ async function verificarFirmado(texto) {
   const sello = campos[campos.length - 1].toUpperCase();
   let resultado;
   if (estado.sellosCancelados.includes(sello) || estado.cancelados.includes(documento.folio)) {
-    resultado = { tipo: "error", titulo: "Auténtico, pero CANCELADO", detalle: `La Asociación canceló esta ${documento.nombre}. No es válida.` };
+    resultado = documento.masculino
+      ? { tipo: "error", titulo: "Auténtico, pero CANCELADO", detalle: `La Asociación canceló este ${documento.nombre}. No es válido.` }
+      : { tipo: "error", titulo: "Auténtico, pero CANCELADO", detalle: `La Asociación canceló esta ${documento.nombre}. No es válida.` };
   } else if (documento.vigencia && hoy() > documento.vigencia) {
     resultado = { tipo: "aviso", titulo: "Auténtico, pero VENCIDO", detalle: `Su vigencia terminó el ${fechaLarga(documento.vigencia)}.` };
   } else {
@@ -335,6 +338,24 @@ function datosMulta(c) {
       ["Fecha de los hechos", fechaLarga(hechos)],
       ["Emisión", fechaLarga(emision)],
       ["Fecha límite de pago", fechaLarga(limite)],
+    ],
+  };
+}
+
+function datosOficio(c) {
+  const [, , , folio, destinatario, asunto, fecha] = c;
+  if (!/^OF\/\d{4}\/\d+$/.test(folio) || !esFecha(fecha)) return null;
+  return {
+    folio,
+    vigencia: null, // un oficio no vence; solo puede cancelarse
+    nombre: "oficio",
+    masculino: true,
+    filas: [
+      ["Documento", "Oficio del Consejo de Administración"],
+      ["Folio", folio],
+      ["Dirigido a", destinatario],
+      ["Asunto", asunto],
+      ["Fecha", fechaLarga(fecha)],
     ],
   };
 }
